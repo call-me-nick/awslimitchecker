@@ -37,15 +37,17 @@ Jason Antman <jason@jasonantman.com> <http://www.jasonantman.com>
 ##############################################################################
 """
 
-import sys
 import argparse
-import logging
 import json
+import logging
+import sys
+
 import termcolor
+import yaml
 
 from .checker import AwsLimitChecker
+from .limit import SOURCE_API, SOURCE_TA
 from .utils import StoreKeyValuePair, dict2cols
-from .limit import SOURCE_TA, SOURCE_API
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger()
@@ -109,6 +111,10 @@ class Runner(object):
                        default=False,
                        help='print a list of all AWS service types that '
                             'awslimitchecker knows how to check')
+        p.add_argument('--limits-vs-actual', action='store_true',
+                       default=False,
+                       help='print json of known limit types with: '
+                            'default limit, current limit, and actual usage')
         p.add_argument('-l', '--list-limits', action='store_true',
                        default=False,
                        help='print all AWS effective limits in "service_name/'
@@ -165,6 +171,11 @@ class Runner(object):
         p.add_argument('--skip-ta', action='store_true', default=False,
                        help='do not attempt to pull *any* information on limits'
                        ' from Trusted Advisor')
+        p.add_argument('--output-format', default='text',
+                        help='Output format. One of: json, yaml, text (default)')
+        p.add_argument('--filter-defaults', action='store_true', default=False,
+                        help='Do not output where the default setting'
+                            ' and current setting are identical.')
         g = p.add_mutually_exclusive_group()
         g.add_argument('--ta-refresh-wait', dest='ta_refresh_wait',
                        action='store_true', default=False,
@@ -240,6 +251,59 @@ class Runner(object):
                 data["{s}/{l}".format(s=svc, l=lim)] = '{v}'.format(
                     v=limits[svc][lim].default_limit)
         print(dict2cols(data))
+
+
+    def list_limits_vs_actual(self):
+        ''' Gather the default, current, and in-use for each limits key. '''
+        limits = self.checker.get_limits(service=self.service_name)
+        data = {}
+        for svc in sorted(limits.keys()):
+            for lim in sorted(limits[svc].keys()):
+                data["{s}/{l}".format(s=svc, l=lim)] = {}
+                # default limit
+                data["{s}/{l}".format(s=svc, l=lim)]['default'] = '{v}'.format(
+                    v=limits[svc][lim].default_limit)
+                # current limit
+                src_str = ''
+                if limits[svc][lim].get_limit_source() == SOURCE_API:
+                    src_str = ' (API)'
+                if limits[svc][lim].get_limit_source() == SOURCE_TA:
+                    src_str = ' (TA)'
+                data["{s}/{l}".format(s=svc, l=lim)]['current'] = '{v}{t}'.format(
+                    v=limits[svc][lim].get_limit(),
+                    t=src_str)
+        # actual usage
+        self.checker.find_usage(
+            service=self.service_name, use_ta=(not self.skip_ta))
+        limits = self.checker.get_limits(
+            service=self.service_name, use_ta=(not self.skip_ta))
+        for svc in sorted(limits.keys()):
+            for lim in sorted(limits[svc].keys()):
+                data["{s}/{l}".format(s=svc, l=lim)]['usage'] = '{v}'.format(
+                    v=limits[svc][lim].get_current_usage_str())
+        return data
+
+
+    def output(self, output_format, data):
+        ''' Choose your output format. '''
+        if output_format == 'json':
+            print(json.dumps(data, indent=2, sort_keys=True))
+        elif output_format == 'yaml':
+            print(yaml.dump(data, default_flow_style=False))
+        else:
+            print(dict2cols(data))
+
+
+    def filter_defaults(self, data):
+        """ Return only the records where default and current are different. """
+        filtered = {}
+        for setting in data.keys():
+            # Prevent ' (API)' in current from causing a false diff.
+            stripped_current = data[setting]['current'].split(' ')[0]
+            if stripped_current != data[setting]['default']:
+                filtered[setting] = data[setting]
+        return filtered
+
 
     def iam_policy(self):
         policy = self.checker.get_required_iam_policy()
@@ -385,6 +449,13 @@ class Runner(object):
 
         if args.list_defaults:
             self.list_defaults()
+            raise SystemExit(0)
+
+        if args.limits_vs_actual:
+            data = self.list_limits_vs_actual()
+            if args.filter_defaults:
+                data = self.filter_defaults(data)
+            self.output(args.output_format, data)
             raise SystemExit(0)
 
         if args.list_limits:
