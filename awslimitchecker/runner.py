@@ -255,7 +255,7 @@ class Runner(object):
 
 
     def list_limits_vs_actual(self):
-        ''' Gather the default, current, and in-use for each limits key. '''
+        """ Gather the default, current, and in-use for each limits key. """
         limits = self.checker.get_limits(service=self.service_name)
         data = {}
         for svc in sorted(limits.keys()):
@@ -286,7 +286,7 @@ class Runner(object):
 
 
     def output(self, output_format, data):
-        ''' Choose your output format. '''
+        """ Choose your output format. """
         if output_format == 'json':
             print(json.dumps(data, indent=2, sort_keys=True))
         elif output_format == 'yaml':
@@ -327,6 +327,7 @@ class Runner(object):
         if not self.colorize:
             return s
         return termcolor.colored(s, color)
+
 
     def print_issue(self, service_name, limit, crits, warns):
         """
