@@ -172,9 +172,9 @@ class Runner(object):
                        help='do not attempt to pull *any* information on limits'
                        ' from Trusted Advisor')
         p.add_argument('--output-format', default='text',
-                        help='Output format. One of: json, yaml, text (default)')
+                       help='Output format. One of: json, yaml, text (default)')
         p.add_argument('--filter-defaults', action='store_true', default=False,
-                        help='Do not output where the default setting'
+                       help='Do not output where the default setting'
                             ' and current setting are identical.')
         g = p.add_mutually_exclusive_group()
         g.add_argument('--ta-refresh-wait', dest='ta_refresh_wait',
@@ -241,7 +241,8 @@ class Runner(object):
                 data["{s}/{l}".format(s=svc, l=lim)] = '{v}{t}'.format(
                     v=limits[svc][lim].get_limit(),
                     t=src_str)
-        print(dict2cols(data))
+        return data
+
 
     def list_defaults(self):
         limits = self.checker.get_limits(service=self.service_name)
@@ -250,7 +251,7 @@ class Runner(object):
             for lim in sorted(limits[svc].keys()):
                 data["{s}/{l}".format(s=svc, l=lim)] = '{v}'.format(
                     v=limits[svc][lim].default_limit)
-        print(dict2cols(data))
+        return data
 
 
     def list_limits_vs_actual(self):
@@ -319,7 +320,8 @@ class Runner(object):
             for lim in sorted(limits[svc].keys()):
                 data["{s}/{l}".format(s=svc, l=lim)] = '{v}'.format(
                     v=limits[svc][lim].get_current_usage_str())
-        print(dict2cols(data))
+        return data
+
 
     def color_output(self, s, color):
         if not self.colorize:
@@ -448,7 +450,7 @@ class Runner(object):
             raise SystemExit(0)
 
         if args.list_defaults:
-            self.list_defaults()
+            self.output(args.output_format, self.list_defaults())
             raise SystemExit(0)
 
         if args.limits_vs_actual:
@@ -459,7 +461,7 @@ class Runner(object):
             raise SystemExit(0)
 
         if args.list_limits:
-            self.list_limits()
+            self.output(args.output_format, self.list_limits())
             raise SystemExit(0)
 
         if args.iam_policy:
@@ -467,7 +469,7 @@ class Runner(object):
             raise SystemExit(0)
 
         if args.show_usage:
-            self.show_usage()
+            self.output(args.output_format, self.show_usage())
             raise SystemExit(0)
 
         # else check
